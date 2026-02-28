@@ -1,22 +1,21 @@
 
 import React from 'react';
 
-// Fix for 'iconify-icon' property errors in JSX by extending both global and React's internal JSX namespaces
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'iconify-icon': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { 
-        icon?: string; 
-        width?: string | number; 
-        height?: string | number;
-        flip?: string;
-        rotate?: string | number;
-        mode?: string;
-        inline?: boolean;
-        style?: React.CSSProperties;
-      }, HTMLElement>;
-    }
-  }
+// Fix: Added missing Room interface required by BookingForm.tsx.
+export interface Room {
+  id: string;
+  name: string;
+  type: string;
+  level: number;
+}
+
+// Fix: Added missing Message interface required by Messaging.tsx.
+export interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: string;
 }
 
 declare module 'react' {
@@ -31,6 +30,7 @@ declare module 'react' {
         mode?: string;
         inline?: boolean;
         style?: React.CSSProperties;
+        className?: string;
       }, HTMLElement>;
     }
   }
@@ -55,10 +55,11 @@ export interface Course {
   id: string;
   name: string;
   code: string;
-  teacherId: string;
-  teacherName: string;
+  teacher_id: string;
+  teacher_name: string;
   description: string;
   color: string;
+  created_at?: string;
 }
 
 export interface Assignment {
@@ -81,6 +82,15 @@ export interface Submission {
   status: 'submitted' | 'pending' | 'graded';
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'assignment' | 'submission' | 'message' | 'booking';
+  timestamp: string;
+  read: boolean;
+}
+
 export interface RoomBooking {
   id: string;
   resourceId: string;
@@ -89,34 +99,7 @@ export interface RoomBooking {
   studentName: string;
   studentClass: string;
   purpose: string;
-  startTime: string; // ISO string
-  endTime: string; // ISO string
-  level?: 'X' | 'XI' | 'XII';
-}
-
-export interface Room {
-  id: string;
-  name: string;
-  capacity: number;
-  type: string;
-  level?: 'X' | 'XI' | 'XII';
-}
-
-export interface AppNotification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'assignment' | 'submission' | 'booking' | 'message';
-  timestamp: string;
-  read: boolean;
-}
-
-export interface Message {
-  id: string;
-  senderId: string;
-  senderName: string;
-  receiverId: string;
-  content: string;
-  timestamp: string;
-  read: boolean;
+  startTime: string;
+  endTime: string;
+  level?: number;
 }

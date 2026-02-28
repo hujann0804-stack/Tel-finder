@@ -11,225 +11,256 @@ interface BookingFormProps {
   onSuccess: () => void;
 }
 
+type Category = 'classroom' | 'facility' | 'item' | null;
+
 const BookingForm: React.FC<BookingFormProps> = ({ user, bookings, setBookings, onSuccess }) => {
-  const [resourceType, setResourceType] = useState<'room' | 'item' | null>(null);
+  const [view, setView] = useState<'schedule' | 'selection' | 'form'>('schedule');
+  const [selectedDate, setSelectedDate] = useState<number>(new Date().getDate());
+  const [category, setCategory] = useState<Category>(null);
   const [formData, setFormData] = useState({
     resourceId: '',
     purpose: '',
-    date: '',
+    organization: '',
+    date: new Date().toISOString().split('T')[0],
     startTime: '',
     endTime: '',
   });
   const [isChecking, setIsChecking] = useState(false);
 
+  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+  
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.resourceId || !formData.date || !formData.startTime) {
-      alert("Harap isi semua kolom!");
+      alert("Harap isi semua kolom wajib!");
       return;
     }
 
     setIsChecking(true);
-    const scheduleStr = bookings.map(b => `${b.resourceName} pada ${b.startTime}`).join(', ');
-    const bookingStr = `${formData.resourceId} pada ${formData.date} ${formData.startTime}`;
-    
-    await analyzeScheduleConflict(bookingStr, scheduleStr);
-    setIsChecking(false);
+    try {
+      // Simulasi pengecekan konflik dengan AI
+      const scheduleStr = bookings.map(b => `${b.resourceName} pada ${b.startTime}`).join(', ');
+      const bookingStr = `${formData.resourceId} pada ${formData.date} ${formData.startTime}`;
+      await analyzeScheduleConflict(bookingStr, scheduleStr);
 
-    const conflict = bookings.find(b => 
-      b.resourceId === formData.resourceId && 
-      new Date(b.startTime).toDateString() === new Date(formData.date).toDateString()
-    );
+      const resource = category === 'item' 
+        ? EQUIPMENT.find(e => e.id === formData.resourceId)
+        : ROOMS.find(r => r.id === formData.resourceId);
 
-    if (conflict) {
-      alert("Maaf, sumber daya sudah dipesan pada waktu tersebut. Cek kalender!");
-      return;
+      const newBooking: RoomBooking = {
+        id: Date.now().toString(),
+        resourceId: formData.resourceId,
+        resourceName: resource?.name || 'Unknown',
+        resourceType: category === 'item' ? 'item' : 'room',
+        studentName: user.name,
+        studentClass: user.class || 'X-A',
+        purpose: formData.organization ? `[${formData.organization}] ${formData.purpose}` : formData.purpose,
+        startTime: `${formData.date}T${formData.startTime}:00`,
+        endTime: `${formData.date}T${formData.endTime}:00`,
+        level: (resource as Room)?.level
+      };
+
+      setBookings([...bookings, newBooking]);
+      alert(`Peminjaman ${resource?.name} berhasil diajukan!`);
+      resetForm();
+      onSuccess();
+    } catch (err) {
+      console.error(err);
+      alert("Terjadi kesalahan saat pengecekan jadwal.");
+    } finally {
+      setIsChecking(false);
     }
-
-    const resource = resourceType === 'room' 
-      ? ROOMS.find(r => r.id === formData.resourceId)
-      : EQUIPMENT.find(e => e.id === formData.resourceId);
-
-    const newBooking: RoomBooking = {
-      id: Date.now().toString(),
-      resourceId: formData.resourceId,
-      resourceName: resource?.name || 'Unknown',
-      resourceType: resourceType as 'room' | 'item',
-      studentName: user.name,
-      studentClass: user.class || 'X-A',
-      purpose: formData.purpose,
-      startTime: `${formData.date}T${formData.startTime}:00`,
-      endTime: `${formData.date}T${formData.endTime}:00`,
-      level: (resource as Room)?.level // Automatically assign level from room data
-    };
-
-    setBookings([...bookings, newBooking]);
-    alert(`Peminjaman ${resourceType === 'room' ? 'ruangan' : 'barang'} berhasil didaftarkan!`);
-    onSuccess();
   };
 
-  if (!resourceType) {
+  const resetForm = () => {
+    setView('schedule');
+    setCategory(null);
+    setFormData({
+      resourceId: '',
+      purpose: '',
+      organization: '',
+      date: new Date().toISOString().split('T')[0],
+      startTime: '',
+      endTime: '',
+    });
+  };
+
+  const getBookingsForDate = (day: number) => {
+    return bookings.filter(b => new Date(b.startTime).getDate() === day);
+  };
+
+  // 1. Dashboard Jadwal
+  if (view === 'schedule') {
+    const selectedDayBookings = getBookingsForDate(selectedDate);
     return (
-      <div className="max-w-4xl mx-auto space-y-12 animate-fade-slide text-center">
-        <div className="space-y-4">
-          <h2 className="text-4xl font-bold text-slate-900 dark:text-white">Apa yang ingin Anda pinjam?</h2>
-          <p className="text-slate-500 dark:text-slate-400 text-lg">Pilih kategori fasilitas yang Anda butuhkan untuk kegiatan akademik.</p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <button 
-             onClick={() => setResourceType('room')}
-             className="group relative bg-white dark:bg-slate-800 p-12 rounded-[3rem] border-2 border-transparent hover:border-sky-500 shadow-xl transition-all hover:-translate-y-2 overflow-hidden"
-           >
-              <div className="absolute top-[-10%] right-[-10%] w-40 h-40 bg-sky-50 dark:bg-sky-900/20 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-              <div className="w-24 h-24 bg-sky-500 rounded-3xl mx-auto flex items-center justify-center text-white mb-8 shadow-2xl shadow-sky-200 dark:shadow-none relative z-10">
-                <iconify-icon icon="solar:home-bold-duotone" width="48"></iconify-icon>
-              </div>
-              <h3 className="text-2xl font-bold mb-2 relative z-10">Pinjam Ruangan</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium relative z-10">Kelas, Lab, Lapangan, atau Ruang Multimedia</p>
-           </button>
-
-           <button 
-             onClick={() => setResourceType('item')}
-             className="group relative bg-white dark:bg-slate-800 p-12 rounded-[3rem] border-2 border-transparent hover:border-indigo-500 shadow-xl transition-all hover:-translate-y-2 overflow-hidden"
-           >
-              <div className="absolute top-[-10%] right-[-10%] w-40 h-40 bg-indigo-50 dark:bg-indigo-900/20 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-              <div className="w-24 h-24 bg-indigo-500 rounded-3xl mx-auto flex items-center justify-center text-white mb-8 shadow-2xl shadow-indigo-200 dark:shadow-none relative z-10">
-                <iconify-icon icon="solar:box-bold-duotone" width="48"></iconify-icon>
-              </div>
-              <h3 className="text-2xl font-bold mb-2 relative z-10">Pinjam Barang</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium relative z-10">Proyektor, Sound System, Kabel, dan Peralatan lainnya</p>
-           </button>
+      <div className="space-y-8 animate-fade-slide">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Status Fasilitas & Inventaris</h2>
+            <p className="text-slate-500 font-medium">Monitoring penggunaan aset sekolah SMAN 3 Jakarta.</p>
+          </div>
+          <button 
+            onClick={() => setView('selection')}
+            className="bg-teladan-blue text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200 dark:shadow-none hover:scale-105 transition-all"
+          >
+            <iconify-icon icon="solar:calendar-add-bold-duotone" width="24"></iconify-icon>
+            Ajukan Peminjaman
+          </button>
         </div>
 
-        <div className="pt-8">
-           <p className="text-sm font-bold text-slate-400 flex items-center justify-center gap-2 uppercase tracking-widest">
-             <iconify-icon icon="solar:info-circle-bold-duotone" width="18"></iconify-icon>
-             Proses verifikasi otomatis akan aktif setelah konfirmasi
-           </p>
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+          <div className="xl:col-span-3 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm">
+            <div className="grid grid-cols-7 gap-3">
+              {days.map(d => <div key={d} className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest py-3">{d}</div>)}
+              {Array.from({length: 31}).map((_, i) => {
+                const dayNum = i + 1;
+                const isSelected = dayNum === selectedDate;
+                const dayBookings = getBookingsForDate(dayNum);
+                return (
+                  <button key={i} onClick={() => setSelectedDate(dayNum)} className={`min-h-[100px] p-3 rounded-3xl border transition-all text-left ${isSelected ? 'bg-blue-50 dark:bg-blue-900/30 border-teladan-blue ring-1 ring-teladan-blue' : 'bg-white dark:bg-slate-800 border-slate-50 dark:border-slate-700 hover:border-slate-200'}`}>
+                    <span className={`text-sm font-bold ${isSelected ? 'text-teladan-blue' : 'text-slate-400'}`}>{dayNum}</span>
+                    <div className="mt-2 flex flex-col gap-1">
+                      {dayBookings.slice(0, 3).map(b => (
+                        <div key={b.id} className={`h-1.5 w-full rounded-full ${b.resourceType === 'room' ? 'bg-teladan-red' : 'bg-indigo-500'}`}></div>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm">
+             <h3 className="text-xl font-bold mb-6">Detail {selectedDate} Okt</h3>
+             <div className="space-y-4">
+               {selectedDayBookings.length === 0 ? <p className="text-slate-400 text-sm italic">Tidak ada agenda.</p> : 
+                selectedDayBookings.map(b => (
+                  <div key={b.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-700/50">
+                    <p className="font-bold text-sm">{b.resourceName}</p>
+                    <p className="text-[10px] text-slate-500">{b.studentName} | {new Date(b.startTime).getHours()}:00</p>
+                  </div>
+                ))}
+             </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  // 2. Pemilihan Kategori
+  if (view === 'selection') {
+    const categories = [
+      { id: 'classroom' as Category, title: 'Ruang Kelas', sub: 'Belajar kelompok atau rapat kelas', icon: 'solar:home-2-bold-duotone', color: 'bg-teladan-blue' },
+      { id: 'facility' as Category, title: 'Fasilitas Umum', sub: 'Lab, Aula, Lapangan, atau Masjid', icon: 'solar:buildings-bold-duotone', color: 'bg-teladan-red' },
+      { id: 'item' as Category, title: 'Alat & Barang', sub: 'Proyektor, Sound, atau Kabel Roll', icon: 'solar:box-bold-duotone', color: 'bg-indigo-500' }
+    ];
+
+    return (
+      <div className="max-w-5xl mx-auto space-y-12 animate-fade-slide text-center pt-10 pb-20">
+        <button onClick={() => setView('schedule')} className="mb-4 flex items-center gap-2 text-slate-400 font-bold hover:text-teladan-blue mx-auto transition-colors">
+          <iconify-icon icon="solar:alt-arrow-left-bold-duotone" width="24"></iconify-icon> Kembali ke Jadwal
+        </button>
+        <div className="space-y-2">
+          <h2 className="text-4xl font-bold">Apa yang ingin Anda pinjam?</h2>
+          <p className="text-slate-500 text-lg">Pilih kategori fasilitas sekolah yang dibutuhkan.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+          {categories.map(cat => (
+            <button key={cat.id} onClick={() => { setCategory(cat.id); setView('form'); }} className="group bg-white dark:bg-slate-800 p-10 rounded-[3rem] border-2 border-transparent hover:border-slate-200 dark:hover:border-slate-600 shadow-xl transition-all hover:-translate-y-2">
+              <div className={`w-20 h-20 ${cat.color} rounded-3xl mx-auto flex items-center justify-center text-white mb-6 shadow-2xl sonar-effect`}>
+                <iconify-icon icon={cat.icon} width="40"></iconify-icon>
+              </div>
+              <h3 className="text-xl font-bold mb-2">{cat.title}</h3>
+              <p className="text-slate-400 text-xs font-medium">{cat.sub}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Form Peminjaman
+  const filteredOptions = category === 'classroom' 
+    ? ROOMS.filter(r => r.type === 'Classroom')
+    : category === 'facility'
+      ? ROOMS.filter(r => r.type !== 'Classroom')
+      : EQUIPMENT;
+
   return (
     <div className="max-w-4xl mx-auto animate-fade-slide pb-20">
-      <button 
-        onClick={() => setResourceType(null)}
-        className="mb-8 flex items-center gap-2 text-slate-500 font-bold hover:text-sky-500 transition-colors"
-      >
-        <iconify-icon icon="solar:alt-arrow-left-bold-duotone" width="24"></iconify-icon>
-        Pilih Kategori Lain
+      <button onClick={() => setView('selection')} className="mb-8 flex items-center gap-2 text-slate-400 font-bold hover:text-teladan-blue">
+        <iconify-icon icon="solar:alt-arrow-left-bold-duotone" width="24"></iconify-icon> Ganti Kategori
       </button>
 
-      <div className="bg-white dark:bg-slate-800 p-8 md:p-12 rounded-[3rem] border border-neutral-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
-        <div className={`absolute top-0 right-0 w-32 h-32 opacity-5 rounded-bl-full ${resourceType === 'room' ? 'bg-sky-500' : 'bg-indigo-500'}`}></div>
-
-        <div className="flex items-center gap-6 mb-12">
-          <div className={`w-20 h-20 rounded-[2rem] ${resourceType === 'room' ? 'bg-sky-500 shadow-sky-100' : 'bg-indigo-500 shadow-indigo-100'} flex items-center justify-center text-white shadow-2xl dark:shadow-none sonar-effect`}>
-            <iconify-icon icon={resourceType === 'room' ? 'solar:home-bold-duotone' : 'solar:box-bold-duotone'} width="40"></iconify-icon>
+      <div className="bg-white dark:bg-slate-800 p-10 md:p-14 rounded-[3.5rem] border border-slate-200 dark:border-slate-700 shadow-2xl relative overflow-hidden">
+        <div className="flex items-center gap-8 mb-12">
+          <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-teladan-blue shadow-inner">
+            <iconify-icon icon={category === 'item' ? 'solar:box-bold-duotone' : 'solar:map-point-bold-duotone'} width="40"></iconify-icon>
           </div>
           <div>
-            <h2 className="text-3xl font-bold">Detail Peminjaman {resourceType === 'room' ? 'Ruang' : 'Barang'}</h2>
-            <p className="text-slate-500 font-medium">Mohon lengkapi detail penggunaan fasilitas berikut.</p>
+            <h2 className="text-3xl font-bold">Formulir Pengajuan</h2>
+            <p className="text-slate-500 font-medium">Kategori: {category === 'classroom' ? 'Ruang Kelas' : category === 'facility' ? 'Fasilitas Umum' : 'Alat & Barang'}</p>
           </div>
         </div>
 
-        <form onSubmit={handleBooking} className="space-y-10">
+        <form onSubmit={handleBooking} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">
-                {resourceType === 'room' ? 'Pilih Ruangan' : 'Pilih Barang'}
-              </label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Pilih {category === 'item' ? 'Barang' : 'Ruangan'}</label>
               <select 
-                className="w-full bg-slate-50 dark:bg-slate-700 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-sky-500 font-bold transition-all"
+                className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-teladan-blue font-bold text-slate-800 dark:text-white"
                 value={formData.resourceId}
                 onChange={(e) => setFormData({...formData, resourceId: e.target.value})}
+                required
               >
-                <option value="">-- Pilih {resourceType === 'room' ? 'Ruangan' : 'Inventaris'} --</option>
-                {resourceType === 'room' ? (
-                  ROOMS.map(room => (
-                    <option key={room.id} value={room.id}>{room.name} ({room.type})</option>
-                  ))
-                ) : (
-                  EQUIPMENT.map(item => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))
-                )}
+                <option value="">-- Pilih Aset --</option>
+                {filteredOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
               </select>
             </div>
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Keperluan</label>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Organisasi / Eskul (Opsional)</label>
               <input 
                 type="text" 
-                placeholder="Misal: Rapat OSIS / Latihan Teater" 
-                className="w-full bg-slate-50 dark:bg-slate-700 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-sky-500 font-medium"
-                value={formData.purpose}
-                onChange={(e) => setFormData({...formData, purpose: e.target.value})}
+                placeholder="Misal: OSIS / MPK / Basket" 
+                className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-teladan-blue font-medium"
+                value={formData.organization}
+                onChange={(e) => setFormData({...formData, organization: e.target.value})}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="md:col-span-2 space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tujuan Penggunaan</label>
+            <textarea 
+              placeholder="Jelaskan secara singkat alasan peminjaman..." 
+              className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-teladan-blue font-medium h-24 resize-none"
+              value={formData.purpose}
+              onChange={(e) => setFormData({...formData, purpose: e.target.value})}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
               <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Tanggal</label>
-              <input 
-                type="date" 
-                className="w-full bg-slate-50 dark:bg-slate-700 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-sky-500 font-bold"
-                value={formData.date}
-                onChange={(e) => setFormData({...formData, date: e.target.value})}
-              />
+              <input type="date" className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 font-bold" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required />
             </div>
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Mulai</label>
-              <input 
-                type="time" 
-                className="w-full bg-slate-50 dark:bg-slate-700 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-sky-500 font-bold"
-                value={formData.startTime}
-                onChange={(e) => setFormData({...formData, startTime: e.target.value})}
-              />
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Jam Mulai</label>
+              <input type="time" className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 font-bold" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} required />
             </div>
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Selesai</label>
-              <input 
-                type="time" 
-                className="w-full bg-slate-50 dark:bg-slate-700 border-none rounded-2xl p-5 outline-none focus:ring-2 ring-sky-500 font-bold"
-                value={formData.endTime}
-                onChange={(e) => setFormData({...formData, endTime: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div className="p-8 bg-sky-50 dark:bg-slate-700/30 rounded-[2rem] border-2 border-dashed border-sky-100 dark:border-slate-700">
-            <div className="flex items-start gap-5">
-              <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center text-white shrink-0">
-                <iconify-icon icon="solar:info-circle-bold-duotone" width="24"></iconify-icon>
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-bold text-sky-800 dark:text-sky-300 uppercase tracking-wider text-xs">AI Smart Verifier</h4>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                  Sistem kami akan mengecek konflik jadwal secara otomatis. Anda akan menerima notifikasi jika peminjaman disetujui.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Jam Selesai</label>
+              <input type="time" className="w-full bg-slate-50 dark:bg-slate-900/50 border-none rounded-2xl p-5 font-bold" value={formData.endTime} onChange={(e) => setFormData({...formData, endTime: e.target.value})} required />
             </div>
           </div>
 
           <button 
             type="submit" 
             disabled={isChecking}
-            className={`w-full py-6 rounded-[2rem] ${resourceType === 'room' ? 'bg-sky-500 shadow-sky-100' : 'bg-indigo-500 shadow-indigo-100'} text-white font-bold text-xl shadow-2xl dark:shadow-none hover:opacity-90 transition-all flex items-center justify-center gap-4 ${isChecking ? 'opacity-70 cursor-not-allowed' : ''}`}
+            className={`w-full py-6 rounded-3xl bg-teladan-blue text-white font-bold text-xl shadow-2xl flex items-center justify-center gap-4 transition-all ${isChecking ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.01]'}`}
           >
-            {isChecking ? (
-              <>
-                <iconify-icon icon="solar:loading-bold-duotone" className="animate-spin" width="32"></iconify-icon>
-                Menghubungkan ke Calendar...
-              </>
-            ) : (
-              <>
-                <iconify-icon icon="solar:check-circle-bold-duotone" width="32"></iconify-icon>
-                Ajukan Peminjaman
-              </>
-            )}
+            {isChecking ? <iconify-icon icon="solar:restart-bold-duotone" className="animate-spin" width="30"></iconify-icon> : 'Kirim Pengajuan'}
           </button>
         </form>
       </div>
